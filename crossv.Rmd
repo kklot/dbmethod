@@ -1,0 +1,118 @@
+---
+title: "DB Method"
+author: "Kinh Nguyen"
+date: "`r Sys.Date()`"
+params:
+  country: "Senegal"
+  sex: 2
+---
+
+```{r include=FALSE, message=FALSE, warning=FALSE}
+library(ktools)
+library(TMB)
+library(dplyr)
+library(loo)
+library(data.table)
+library(knitr)
+
+set.seed(123)
+```
+
+```{r}
+# sexual debut data
+ssa = data.table::fread("data/SSA_AFS.csv.bz2")
+
+# TMB model
+compile('model.cpp')
+dyn.load(dynlib('model'))
+openmp(4)
+invisible(config(tape.parallel=FALSE, DLL='model'))
+
+# sample posterior
+source("tmb_sampling.R")
+
+# fit and get elpd
+source("get_lli.R")
+```
+
+# `r params$country` data of sex `r params$sex`
+
+```{r}
+fitdt = ssa %>% filter(sex == params$sex & 
+                       ISO_A3 == name2iso(params$country) & ver == "DHS")
+
+```
+
+# Fitting
+
+```{r}
+# non-weighted
+# -----------------------------------------------------------------------------
+uga1 = get_lli(to_skew = 0, data = fitdt)
+uga2 = get_lli(to_skew = 0, yob_term = 1, data = fitdt)
+uga3 = get_lli(to_skew = 0, yob_term = 1, smooth_yob = 1, data = fitdt)
+uga4 = get_lli(to_skew = 0, yob_term = 1, smooth_yob = 1, age_term = 1, data = fitdt)
+uga5 = get_lli(to_skew = 0, yob_term = 1, smooth_yob = 1, age_term = 1, smooth_age = 1, data = fitdt)
+
+uga1s = get_lli(to_skew = 1, data = fitdt)
+uga2s = get_lli(to_skew = 1, yob_term = 1, data = fitdt, check=F)
+uga3s = get_lli(to_skew = 1, yob_term = 1, smooth_yob = 1, data = fitdt)
+uga4s = get_lli(to_skew = 1, yob_term = 1, smooth_yob = 1, age_term = 1, data = fitdt)
+uga5s = get_lli(to_skew = 1, yob_term = 1, smooth_yob = 1, age_term = 1, smooth_age = 1, data = fitdt)
+
+# Kish-weighted
+# -----------------------------------------------------------------------------
+uga1k = get_lli(to_skew = 0, weightv = "kish", data = fitdt)
+uga2k = get_lli(to_skew = 0, weightv = "kish", yob_term = 1, data = fitdt)
+uga3k = get_lli(to_skew = 0, weightv = "kish", yob_term = 1, smooth_yob = 1, data = fitdt)
+uga4k = get_lli(to_skew = 0, weightv = "kish", yob_term = 1, smooth_yob = 1, age_term = 1, data = fitdt)
+uga5k = get_lli(to_skew = 0, weightv = "kish", yob_term = 1, smooth_yob = 1, age_term = 1, smooth_age = 1, data = fitdt)
+
+uga1sk = get_lli(to_skew = 1, weightv = "kish", data = fitdt)
+uga2sk = get_lli(to_skew = 1, weightv = "kish", yob_term = 1, data = fitdt)
+uga3sk = get_lli(to_skew = 1, weightv = "kish", yob_term = 1, smooth_yob = 1, data = fitdt)
+uga4sk = get_lli(to_skew = 1, weightv = "kish", yob_term = 1, smooth_yob = 1, age_term = 1, data = fitdt)
+uga5sk = get_lli(to_skew = 1, weightv = "kish", yob_term = 1, smooth_yob = 1, age_term = 1, smooth_age = 1, data = fitdt)
+```
+
+# Comparing
+
+```{r}
+
+cpn = loo_compare(list(uga1 = elpd(t(uga1)), 
+                       uga2 = elpd(t(uga2)),
+                       uga3 = elpd(t(uga3)),
+                       uga4 = elpd(t(uga4)),
+                       uga5 = elpd(t(uga5)),
+                       uga1s = elpd(t(uga1s)), 
+                       uga2s = elpd(t(uga2s)),
+                       uga3s = elpd(t(uga3s)),
+                       uga4s = elpd(t(uga4s)),
+                       uga5s = elpd(t(uga5s))
+                       ))  
+
+cpk = loo_compare(list(uga1k = elpd(t(uga1k)), 
+                       uga2k = elpd(t(uga2k)),
+                       uga3k = elpd(t(uga3k)),
+                       uga4k = elpd(t(uga4k)),
+                       uga5k = elpd(t(uga5k)),
+                       uga1sk = elpd(t(uga1sk)), 
+                       uga2sk = elpd(t(uga2sk)),
+                       uga3sk = elpd(t(uga3sk)),
+                       uga4sk = elpd(t(uga4sk)),
+                       uga5sk = elpd(t(uga5sk))
+                       ))  
+
+
+cpn %>% as.data.table(1) %>% 
+  mutate_if(is.numeric, round, digits = 2) %>% 
+  mutate(x = paste(elpd_diff, bracket(se_diff))) %>% 
+  select(rn, x) 
+
+cpk %>% as.data.table(1) %>% 
+  mutate_if(is.numeric, round, digits = 2) %>% 
+  mutate(x = paste(elpd_diff, bracket(se_diff))) %>% 
+  select(rn, x) 
+
+paste0(unlist(params), collapse='') %>% paste0('.RData') %>% save.image
+```
