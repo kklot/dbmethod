@@ -11,6 +11,29 @@ using namespace Eigen;
   
 #define _eps 1e-8 // An alternative limit argument for the first-order IGRMF
 
+template <class Type>
+vector<Type> rskewlogis(vector<Type> scale, Type shape, Type skew)
+{
+  vector<Type> u_l(scale.size()), u_u(scale.size());
+  u_l.fill(0.);
+  u_u.fill(1.);
+  vector<Type> u = runif(u_l, u_u);
+  vector<Type> t1 = pow(u, -Type(1.) / skew) - Type(1.);
+  vector<Type> t2 = pow(t1, -Type(1.) / shape);
+  vector<Type> o = Type(1.) / scale * t2;
+  return o;
+}
+
+template <class Type>
+Type rskewlogis(Type scale, Type shape, Type skew)
+{
+  Type u = runif(0., 1.);
+  Type t1 = pow(u, -Type(1.) / skew) - Type(1.);
+  Type t2 = pow(t1, -Type(1.) / shape);
+  Type o = Type(1.) / scale * t2;
+  return o;
+}
+
 // Constraint space-time interaction if use a vector input
 template<class Type>
 Type constraint2D(Type * v, int n_rows, int n_cols, 
